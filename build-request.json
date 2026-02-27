@@ -1,0 +1,38 @@
+{
+  "kind": "build_request",
+  "title": "Add app-ads.txt for AdMob verification",
+  "priority": "normal",
+  "requirements": [
+    {
+      "id": "REQ-5",
+      "text": "Add an `app-ads.txt` file to `frontend/public/` containing the line `google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0` so that AdMob can verify the application at the canonical public URL.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-recent"
+        ],
+        "quotes": [
+          "app-ads.txt dosyasını public klasörüne ekleyeceğim"
+        ]
+      },
+      "acceptanceCriteria": [
+        "File `frontend/public/app-ads.txt` exists and is served at the app root URL (e.g., https://blockverse-9ge.caffeine.xyz/app-ads.txt)",
+        "File contains exactly: `google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0`",
+        "No other changes to existing files are required"
+      ]
+    }
+  ],
+  "constraints": [
+    "Do not modify any backend files",
+    "Do not change any existing frontend logic or components"
+  ],
+  "nonGoals": [
+    "Changing the app name or branding",
+    "Modifying AdMob/AdSense component code",
+    "Any backend integration for ad verification"
+  ],
+  "imageRequirements": {
+    "required": [],
+    "edits": []
+  }
+}

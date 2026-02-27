@@ -1,0 +1,26 @@
+{
+  "kind": "feature_evidence_report",
+  "features": [
+    {
+      "featureId": "feature-add-an-app-ads-txt-file-to-frontend-public-containing-the-line-google-com-pub-7936595519986908-direct-f08c47fec0942fa0-so-that-admob-can-verify-the-application-at-the-canonical-public-url",
+      "featureTitle": "Add an `app-ads.txt` file to `frontend/public/` containing the line `google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0` so that AdMob can verify the application at the canonical public URL.",
+      "files": [
+        "frontend/public/app-ads.txt"
+      ],
+      "components": [
+        "blob-storage@4.0.0",
+        "authorization@4.0.0",
+        "http-outcalls@3.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-5"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

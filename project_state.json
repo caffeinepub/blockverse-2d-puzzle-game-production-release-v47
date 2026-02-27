@@ -1,0 +1,345 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 5,
+  "summary": "BlockVerse is a 2D, mobile-first 8x8 block-placement puzzle game built primarily as a local-first React/TypeScript SPA. Players place randomly generated block shapes onto the board to clear full rows/columns for points, progress through a 10-level visual/difficulty system, and play across multiple modes (Endless, Time Attack, Strategy, Power Boost, Advanced Strategy). The app includes theme switching (light/dark/neon), 10-language i18n with RTL support, sound effects with a toggle, daily login rewards, daily missions with claimable rewards, power-up inventory and usage, and a per-mode local leaderboard with monthly resets and rewards. Monetization is supported via web (AdSense-style components) and native Android/Capacitor-style AdMob bridging (app open, banner, native, interstitial, rewarded) with frequency controls and offline-mode ad disabling. A Motoko/ICP backend exists with access control, user profiles (including avatar blob storage hooks), and daily mission storage, though the gameplay currently runs without backend queries and persists most state in localStorage.",
+  "architectural_notes": [
+    "Frontend is a local-first React + TypeScript app; most persistence uses localStorage (user auth, best scores per mode, leaderboard per mode, missions, rewards, ad counters).",
+    "UI is componentized with theme-aware Tailwind class switching and OKLCH CSS variables; extensive mobile responsiveness (xs breakpoint, touch-manipulation, overflow handling).",
+    "Game logic is separated into pure modules (blockShapes, gameLogic, levelSystem, dailyMissions, leaderboard) consumed by React components.",
+    "Internationalization uses a LanguageContext with imported JSON dictionaries for 10 languages and sets document direction (RTL for Arabic).",
+    "Offline support is implemented via OfflineModeContext (network status listener) to disable ads and mark pending sync; sync is currently a stub.",
+    "Ads are abstracted into web components (Banner/Native/Interstitial/Rewarded simulation) and a mobile bridge layer (mobileAds) with environment detection and frequency controls (app open 24h, interstitial every 3 games).",
+    "Advanced Strategy mode introduces additional state machines/timers (moving obstacles and falling blocks) and a power-up chain mechanic integrated into the board renderer.",
+    "React Query + Internet Identity hooks exist to create a backend actor (useActor) and manage II sessions, but the primary game loop does not require backend queries (useQueries is intentionally empty).",
+    "Backend Motoko canister uses a mixin pattern for authorization (AccessControl + secret initialization) and for blob storage management/certificates/GC pruning.",
+    "Android wrapper hosts the SPA in a WebView and integrates AdMob SDK in Kotlin/layout resources for full ad support and safe insets handling."
+  ],
+  "known_issues": [
+    "Starter power-up initialization uses a different localStorage key pattern (`blockverse-progress-${userCode}`) than the active progression store in `leaderboard.ts` (`blockverse-player-progress`), so new users may not actually receive visible starter power-ups.",
+    "Monthly leaderboard reset/reward logic (`checkAndResetMonth`) does not include the `advancedStrategy` game mode, so that mode’s leaderboard may never reset or award monthly rewards.",
+    "Web ad components are labeled as AdSense but use AdMob-style `ca-app-pub-*` IDs in `data-ad-client`, which is typically incompatible with AdSense rendering expectations.",
+    "Offline sync is not implemented (OfflineModeContext just clears a flag); no real backend reconciliation exists despite UI messaging about syncing.",
+    "Mixed authentication approaches: localStorage “user code” login is used for gameplay while Internet Identity + actor creation is initialized in the app; backend profile/mission APIs appear unused by the current game flow.",
+    "Backend storage env var name appears misspelled (`CAFFFEINE_STORAGE_CASHIER_PRINCIPAL`), which may cause runtime traps if not matched exactly in deployment configuration.",
+    "The in-game “Restart” handler currently navigates back to mode selection rather than resetting the current game state within the same mode.",
+    "Some power-up UI artifacts are referenced in repository summaries (e.g., PowerUpsPanel/PowerUpsButton) but the provided source files are empty in this snapshot, suggesting incomplete/removed components or potential build inconsistencies if imported elsewhere.",
+    "Leaderboard and player progression are purely localStorage-based; claims like “monthly reset” and “top-3 earn power-ups” do not involve server validation and can be manipulated client-side.",
+    "Ad event tracking is stored locally only (localStorage counters/timestamps), so analytics are not centralized and can be cleared by the user."
+  ],
+  "isFixRequest": false,
+  "existing_features": [
+    {
+      "id": "IF-1",
+      "title": "8x8 block-placement core gameplay",
+      "synonyms": [
+        "block puzzle",
+        "grid placement"
+      ],
+      "description": "Implements an 8x8 board where players place selected block shapes if placement is valid; occupied cells store the block’s gradient color string for consistent rendering.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-2",
+      "title": "Line clearing and scoring system",
+      "synonyms": [
+        "row/column clear",
+        "combo scoring"
+      ],
+      "description": "Clears any fully filled rows and columns after placement and awards points via a simple rule (100 for first line + 50 per additional). Triggers combo UI when multiple lines clear.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-3",
+      "title": "Block shape library with level-based complexity",
+      "synonyms": [
+        "shape generator",
+        "procedural block set"
+      ],
+      "description": "Defines 37 block shapes and generates 3-block sets filtered by player level’s allowed complexity range; assigns level-based color palettes from the level system.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-4",
+      "title": "Multi-mode gameplay selection and routing",
+      "synonyms": [
+        "game modes",
+        "mode selection screen"
+      ],
+      "description": "Provides Startup → Mode Selection → Game flow with five modes: Time Attack, Endless, Strategy, Power Boost, Advanced Strategy.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-5",
+      "title": "Time Attack mode with countdown and time bonuses",
+      "synonyms": [
+        "timer mode"
+      ],
+      "description": "Adds a countdown timer, low-time warning styling, game-over on timer expiration, and line-clear time bonuses with a maximum cap.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-6",
+      "title": "Advanced Strategy mode mechanics",
+      "synonyms": [
+        "moving obstacles",
+        "falling blocks",
+        "power-up chain"
+      ],
+      "description": "Adds moving obstacle cells that block placement, periodic falling blocks with pre-warning, and a power-up chain mechanic that can trigger extra random power-ups and bonus points.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-7",
+      "title": "10-level progression and visuals",
+      "synonyms": [
+        "level system",
+        "difficulty scaling"
+      ],
+      "description": "Derives level from score thresholds (1–10) and applies per-level backgrounds, particles, block palettes, difficulty ranges, glow intensity, and bonus multipliers; includes level-up transition overlay.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-8",
+      "title": "Theme system (Light/Dark/Neon)",
+      "synonyms": [
+        "theme selector",
+        "skins"
+      ],
+      "description": "Supports three themes with a floating selector; theme affects styling of gameplay UI, modals, ads, and effects.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-9",
+      "title": "Internationalization with RTL support",
+      "synonyms": [
+        "i18n",
+        "language selector"
+      ],
+      "description": "Supports 10 languages via LanguageContext and translation JSON files; persists language to localStorage and sets document direction RTL for Arabic.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-10",
+      "title": "Local user registration/login via user code",
+      "synonyms": [
+        "offline auth",
+        "code-based login"
+      ],
+      "description": "Allows registering a username and generating a 10-character code; login validates against stored user record in localStorage; includes code copy flow and profile display modal.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-11",
+      "title": "Sound effects system with toggle",
+      "synonyms": [
+        "SFX",
+        "audio"
+      ],
+      "description": "Web Audio API-based sound effects (place, clear, combo, power-up, level up, etc.), persisted sound preference, and a floating sound toggle that resumes AudioContext as needed.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-12",
+      "title": "Power-ups inventory and usage",
+      "synonyms": [
+        "boosters",
+        "special actions"
+      ],
+      "description": "Stores per-user power-up counts, renders a compact PowerUpBar, consumes inventory on use, and applies effects on the board (block/row/column break and shuffle blocks).",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-13",
+      "title": "Daily login rewards with streak multipliers",
+      "synonyms": [
+        "daily reward",
+        "streak bonus"
+      ],
+      "description": "Checks 24-hour claim eligibility, tracks streak and multiplier, generates random reward types (points, power-up, combo), and applies rewards with celebratory UI.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-14",
+      "title": "Daily missions system with progress and claiming",
+      "synonyms": [
+        "quests",
+        "daily tasks"
+      ],
+      "description": "Generates 3 missions every 24 hours per user, tracks progress via gameplay events (lines, score, power-ups, games), and allows claiming rewards (points, power-ups, combo boosts).",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-15",
+      "title": "Per-mode best score tracking",
+      "synonyms": [
+        "high score"
+      ],
+      "description": "Stores and displays best score per selected game mode using localStorage keys scoped by mode.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-16",
+      "title": "Per-mode local leaderboard with badges and monthly reset",
+      "synonyms": [
+        "leaderboard modal",
+        "monthly rankings"
+      ],
+      "description": "Maintains a top-100 leaderboard per mode in localStorage, displays ranks with level-based badges, and performs month-change reset with rewards to top 3 players (power-ups).",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-17",
+      "title": "Offline mode detection and UI behavior",
+      "synonyms": [
+        "network awareness"
+      ],
+      "description": "Detects online/offline status, shows an offline indicator badge in the header, disables ad-based refills/rewards in offline mode, and marks pending sync state.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-18",
+      "title": "Web ads components and simulated rewarded/interstitial flows",
+      "synonyms": [
+        "AdSense components",
+        "web monetization"
+      ],
+      "description": "Implements banner/native ad containers (adsbygoogle), a web interstitial modal with frequency gating, and a simulated rewarded-ad dialog that grants a random power-up.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-19",
+      "title": "Native mobile ads bridge with frequency controls",
+      "synonyms": [
+        "AdMob bridge",
+        "Capacitor ads"
+      ],
+      "description": "Provides a JS bridge API for native environments to show app-open ads (24h min), interstitials (every 3 games), native/banner ads, rewarded ads, and preloading; includes tracking counters in localStorage.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-20",
+      "title": "Android WebView wrapper with AdMob integration",
+      "synonyms": [
+        "APK packaging",
+        "Android Studio setup"
+      ],
+      "description": "Includes Android project scaffolding with WebView host activity, AdMob SDK integration, layouts for banner/native placements, manifest permissions/metadata, and build instructions.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-21",
+      "title": "ICP/Motoko backend: access control and user profile APIs",
+      "synonyms": [
+        "Internet Identity backend",
+        "Motoko canister"
+      ],
+      "description": "Backend canister includes role-based access control initialization via a secret token, user profile storage (name, streak, last login, power-ups, preferred mode), avatar update, and daily mission storage APIs.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-22",
+      "title": "ICP/Motoko backend: blob storage management mixin",
+      "synonyms": [
+        "storage gateway auth",
+        "blob GC"
+      ],
+      "description": "Implements storage gateway principal authorization, dead-blob listing/pruning with forced GC trigger, and certificate creation methods for blob upload workflows.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-23",
+      "title": "ICP/Motoko backend: HTTP outcalls utility",
+      "synonyms": [
+        "ic:http_request helper"
+      ],
+      "description": "Provides reusable HTTP GET/POST outcall helpers with transform function and cycle budgeting, intended for external API integrations.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-24",
+      "title": "Internet Identity integration hooks and backend actor creation",
+      "synonyms": [
+        "II provider",
+        "useActor"
+      ],
+      "description": "Implements an InternetIdentityProvider using @dfinity/auth-client, and a React Query hook to create a configured backend actor and initialize access control using a secret URL/hash parameter.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "feature-add-an-app-ads-txt-file-to-frontend-public-containing-the-line-google-com-pub-7936595519986908-direct-f08c47fec0942fa0-so-that-admob-can-verify-the-application-at-the-canonical-public-url",
+      "title": "Add an `app-ads.txt` file to `frontend/public/` containing the line `google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0` so that AdMob can verify the application at the canonical public URL.",
+      "reqIds": [
+        "REQ-5"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [
+    {
+      "id": "AR-1",
+      "summary": "Add a single frontend configuration source for the app’s public-facing display name (e.g., a `branding` config/module) and refactor the UI to read the display name from this source instead of hardcoding \"BlockVerse\".",
+      "reqIds": [
+        "REQ-1"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-2",
+      "summary": "Update the HTML document title in `frontend/index.html` so it uses the new configurable app display name (and does not contain a hardcoded \"BlockVerse\" string).",
+      "reqIds": [
+        "REQ-2"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-3",
+      "summary": "Update i18n strings so that user-facing text that currently includes \"BlockVerse\" (e.g., welcome text) is driven by the configurable app display name rather than embedding a specific brand name in translation files.",
+      "reqIds": [
+        "REQ-3"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-4",
+      "summary": "Replace the current logo asset usage (`/assets/generated/blockverse-logo-transparent.dim_300x100.png`) with a newly generated neutral logo asset whose filename does not include the old brand name, and update all logo references accordingly.",
+      "reqIds": [
+        "REQ-4"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-5",
+      "summary": "Add an `app-ads.txt` file to the public directory with the correct AdMob publisher ID and Google TAG ID for AdMob app verification.",
+      "reqIds": [],
+      "status": "pending"
+    }
+  ],
+  "gameProjectType": "2d",
+  "projectName": "BlockVerse",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0
+}

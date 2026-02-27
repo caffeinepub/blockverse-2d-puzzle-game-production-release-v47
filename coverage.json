@@ -1,0 +1,47 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-27T19:46:53.898Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 1,
+    "implemented": 1,
+    "items": [
+      {
+        "id": "REQ-5",
+        "summary": "Add an `app-ads.txt` file to `frontend/public/` containing the line `google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0` so that AdMob can verify the application at the canonical public URL.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/public/app-ads.txt"
+        ],
+        "matchedFiles": [
+          "frontend/public/app-ads.txt"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "build-request.json",
+    "build-template/Dockerfile",
+    "build-template/LICENSE",
+    "build-template/README.md",
+    "build-template/deploy.sh",
+    "build-template/icp.yaml",
+    "build-template/src/backend/canister.yaml",
+    "build-template/src/frontend/canister.yaml",
+    "caffeine.lock.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/public/app-ads.txt",
+    "frontend/src/config.ts",
+    "frontend/src/hooks/useInternetIdentity.ts",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

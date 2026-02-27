@@ -1,0 +1,23 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Add app-ads.txt for AdMob verification",
+  "requirements": [
+    {
+      "id": "REQ-5",
+      "summary": "Add app-ads.txt file to frontend/public/ with AdMob publisher ID for canonical URL verification",
+      "acceptanceCriteria": [
+        "File `frontend/public/app-ads.txt` exists and is served at the app root URL (e.g., https://blockverse-9ge.caffeine.xyz/app-ads.txt)",
+        "File contains exactly: `google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0`",
+        "No other changes to existing files are required"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/public/app-ads.txt",
+          "operation": "create",
+          "description": "Create app-ads.txt file containing the AdMob publisher verification line 'google.com, pub-7936595519986908, DIRECT, f08c47fec0942fa0'. This file will be automatically served at the root URL path by the static file server, allowing AdMob to verify ownership of the application domain."
+        }
+      ]
+    }
+  ]
+}
