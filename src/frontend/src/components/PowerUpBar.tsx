@@ -28,7 +28,7 @@ import {
 } from "@/lib/mobileAds";
 import { playSound } from "@/lib/sounds";
 import type { Theme } from "@/pages/Game";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface PowerUpBarProps {
   theme: Theme;
@@ -49,18 +49,36 @@ export function PowerUpBar({
   const [showRefillDialog, setShowRefillDialog] = useState(false);
   const [refillType, setRefillType] = useState<PowerUp["type"] | null>(null);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [scalingButton, setScalingButton] = useState<PowerUp["type"] | null>(
+    null,
+  );
+
+  // Reset scale animation after 300ms
+  useEffect(() => {
+    if (scalingButton) {
+      const timer = setTimeout(() => setScalingButton(null), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [scalingButton]);
+
+  // Listen to storage events to sync powerup counts
+  useEffect(() => {
+    const handleStorage = () => setPowerUps(getPowerUps(userCode));
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [userCode]);
 
   const handleUsePowerUp = (type: PowerUp["type"]) => {
     const success = consumePowerUp(userCode, type);
     if (success) {
       setPowerUps(getPowerUps(userCode));
+      setScalingButton(type);
       onUsePowerUp(type);
     }
   };
 
   const handleRefillClick = (type: PowerUp["type"]) => {
     if (isOffline) {
-      // Don't show ad dialog in offline mode
       return;
     }
     setRefillType(type);
@@ -73,17 +91,14 @@ export function PowerUpBar({
     setIsWatchingAd(true);
     playSound("button");
 
-    // Show rewarded ad with callbacks
     showRewardedAd(
       () => {
-        // onRewarded callback
         const randomType = getRandomPowerUpType();
         addPowerUp(userCode, randomType, 1);
         setPowerUps(getPowerUps(userCode));
         playSound("powerUp");
       },
       () => {
-        // onClosed callback
         setIsWatchingAd(false);
         setShowRefillDialog(false);
         setRefillType(null);
@@ -96,165 +111,187 @@ export function PowerUpBar({
       "relative flex flex-col items-center justify-center gap-0.5 p-1 xs:p-1.5 sm:p-2 rounded-md sm:rounded-lg transition-all duration-200 touch-manipulation flex-shrink-0";
 
     if (count === 0) {
-      return `${baseClass} ${
-        theme === "light"
-          ? "bg-gray-200 text-gray-400"
-          : theme === "dark"
-            ? "bg-gray-800 text-gray-600"
-            : "bg-gray-900 text-gray-700"
-      } cursor-pointer opacity-60 hover:opacity-80`;
+      return `${baseClass} opacity-40 cursor-pointer`;
     }
 
     if (isActive) {
-      return `${baseClass} ${
-        theme === "light"
-          ? "bg-purple-600 text-white shadow-lg shadow-purple-500/50"
-          : theme === "dark"
-            ? "bg-blue-600 text-white shadow-lg shadow-blue-500/50"
-            : "bg-pink-600 text-white shadow-lg shadow-pink-500/50"
-      } scale-105`;
+      switch (theme) {
+        case "light":
+          return `${baseClass} bg-purple-500 text-white ring-2 ring-purple-300 ring-offset-1 animate-pulse`;
+        case "dark":
+          return `${baseClass} bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 ring-offset-gray-900 animate-pulse`;
+        case "neon":
+          return `${baseClass} bg-pink-500 text-white ring-2 ring-pink-300 ring-offset-1 ring-offset-black animate-pulse shadow-[0_0_15px_rgba(236,72,153,0.8)]`;
+        default:
+          return `${baseClass} bg-purple-500 text-white ring-2 ring-purple-300 animate-pulse`;
+      }
     }
 
-    return `${baseClass} ${
-      theme === "light"
-        ? "bg-white/90 text-purple-700 hover:bg-purple-100"
-        : theme === "dark"
-          ? "bg-gray-800/90 text-cyan-400 hover:bg-gray-700"
-          : "bg-black/70 text-pink-400 hover:bg-pink-900/50"
-    } hover:scale-105`;
-  };
-
-  const getCountBadgeClass = () => {
     switch (theme) {
       case "light":
-        return "bg-purple-600 text-white";
+        return `${baseClass} bg-white/70 hover:bg-purple-50 border border-purple-200 text-purple-700`;
       case "dark":
-        return "bg-blue-600 text-white";
+        return `${baseClass} bg-gray-800/70 hover:bg-gray-700 border border-gray-600 text-blue-300`;
       case "neon":
-        return "bg-pink-600 text-white shadow-lg shadow-pink-500/50";
+        return `${baseClass} bg-black/60 hover:bg-pink-900/40 border border-pink-700/50 text-pink-300`;
       default:
-        return "bg-purple-600 text-white";
+        return `${baseClass} bg-white/70 hover:bg-purple-50 border border-purple-200 text-purple-700`;
+    }
+  };
+
+  const getContainerClass = () => {
+    switch (theme) {
+      case "light":
+        return "bg-white/60 backdrop-blur-sm border border-purple-100 rounded-xl p-1.5 sm:p-2";
+      case "dark":
+        return "bg-gray-900/60 backdrop-blur-sm border border-gray-700 rounded-xl p-1.5 sm:p-2";
+      case "neon":
+        return "bg-black/50 backdrop-blur-sm border border-pink-800/50 rounded-xl p-1.5 sm:p-2";
+      default:
+        return "bg-white/60 backdrop-blur-sm border border-purple-100 rounded-xl p-1.5 sm:p-2";
+    }
+  };
+
+  const getCountBadgeClass = (count: number, isActive: boolean) => {
+    if (isActive)
+      return "absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 bg-yellow-400 text-yellow-900";
+    if (count === 0)
+      return "absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 bg-gray-400 text-white";
+    switch (theme) {
+      case "light":
+        return "absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 bg-purple-600 text-white";
+      case "dark":
+        return "absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 bg-blue-500 text-white";
+      case "neon":
+        return "absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 bg-pink-500 text-white";
+      default:
+        return "absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-0.5 bg-purple-600 text-white";
     }
   };
 
   const getDialogClass = () => {
     switch (theme) {
       case "light":
-        return "bg-white text-gray-900";
+        return "";
       case "dark":
-        return "bg-gray-900 text-white border-gray-700";
+        return "bg-gray-900 border-gray-700";
       case "neon":
-        return "bg-black text-white border-pink-500";
+        return "bg-black border-pink-600";
       default:
-        return "bg-white text-gray-900";
+        return "";
     }
   };
 
-  const powerUpTypes: Array<{ type: PowerUp["type"]; shortKey: string }> = [
-    { type: "blockBreak", shortKey: "blockBreak" },
-    { type: "columnBreak", shortKey: "columnBreak" },
-    { type: "rowBreak", shortKey: "rowBreak" },
-    { type: "shuffleBlocks", shortKey: "shuffleBlocks" },
-  ];
+  const getPowerUpName = (type: PowerUp["type"]) => {
+    return t(`powerups.${type}.shortName`);
+  };
 
   return (
     <>
-      {/* Fixed horizontal layout - no wrapping, always in one row */}
-      <div className="flex flex-row items-center justify-center gap-1 xs:gap-1.5 sm:gap-2 w-full overflow-x-auto scrollbar-hide">
-        <TooltipProvider>
-          {powerUpTypes.map(({ type, shortKey }) => {
-            const powerUp = powerUps.find((p) => p.type === type);
-            const count = powerUp?.count || 0;
-            const isActive = activePowerUp === type;
+      <div className={getContainerClass()}>
+        <div className="flex items-center justify-between gap-1 sm:gap-2">
+          <TooltipProvider delayDuration={300}>
+            {powerUps.map((powerUp) => {
+              const isActive = activePowerUp === powerUp.type;
+              const isEmpty = powerUp.count === 0;
+              const isScaling = scalingButton === powerUp.type;
 
-            return (
-              <Tooltip key={type}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => {
-                      if (count > 0) {
-                        playSound("button");
-                        handleUsePowerUp(type);
-                      } else {
-                        handleRefillClick(type);
-                      }
-                    }}
-                    className={getButtonClass(isActive, count)}
-                    disabled={isActive}
-                  >
-                    <img
-                      src={getPowerUpImage(type)}
-                      alt={t(`powerups.${shortKey}.name`)}
-                      className="w-5 h-5 xs:w-6 xs:h-6 sm:w-7 sm:h-7 md:w-8 md:h-8"
-                    />
-                    <span className="text-[8px] xs:text-[9px] sm:text-[10px] font-semibold leading-tight whitespace-nowrap">
-                      {t(`powerups.${shortKey}.shortName`)}
-                    </span>
-                    <div
-                      className={`absolute -top-0.5 -right-0.5 sm:-top-1 sm:-right-1 ${getCountBadgeClass()} rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-[8px] xs:text-[9px] sm:text-[10px] font-bold`}
+              return (
+                <Tooltip key={powerUp.type}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className={`${getButtonClass(isActive, powerUp.count)} ${
+                        isScaling ? "scale-110" : ""
+                      }`}
+                      onClick={() => {
+                        if (isEmpty) {
+                          handleRefillClick(powerUp.type);
+                        } else {
+                          handleUsePowerUp(powerUp.type);
+                        }
+                      }}
+                      data-ocid="powerup.button"
                     >
-                      {count}
-                    </div>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-semibold">
-                    {t(`powerups.${shortKey}.name`)}
-                  </p>
-                  <p className="text-sm">
-                    {t(`powerups.${shortKey}.description`)}
-                  </p>
-                  {count === 0 && !isOffline && (
-                    <p className="text-xs mt-1 text-orange-400">
-                      {t("powerups.clickToRefill")}
+                      {/* Active glow border */}
+                      {isActive && (
+                        <span className="absolute inset-0 rounded-md sm:rounded-lg ring-2 ring-current animate-ping opacity-30" />
+                      )}
+
+                      {/* Count badge */}
+                      <span
+                        className={getCountBadgeClass(powerUp.count, isActive)}
+                      >
+                        {powerUp.count}
+                      </span>
+
+                      <img
+                        src={getPowerUpImage(powerUp.type)}
+                        alt={getPowerUpName(powerUp.type)}
+                        className="w-5 h-5 xs:w-6 xs:h-6 sm:w-7 sm:h-7 object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                      <span className="text-[9px] xs:text-[10px] sm:text-xs font-semibold text-center leading-tight max-w-[48px] sm:max-w-[56px] truncate">
+                        {getPowerUpName(powerUp.type)}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    <p className="font-semibold">
+                      {t(`powerups.${powerUp.type}.name`)}
                     </p>
-                  )}
-                  {count === 0 && isOffline && (
-                    <p className="text-xs mt-1 text-orange-400">
-                      {t("offline.adsDisabled")}
+                    <p className="text-muted-foreground">
+                      {t(`powerups.${powerUp.type}.description`)}
                     </p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </TooltipProvider>
+                    {isEmpty && !isOffline && isNativeMobile() && (
+                      <p className="text-yellow-600 mt-1">
+                        {t("powerups.clickToRefill")}
+                      </p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </TooltipProvider>
+        </div>
       </div>
 
+      {/* Refill Dialog */}
       <Dialog open={showRefillDialog} onOpenChange={setShowRefillDialog}>
-        <DialogContent className={getDialogClass()}>
+        <DialogContent className={getDialogClass()} data-ocid="powerup.dialog">
           <DialogHeader>
-            <DialogTitle>{t("ads.watchForReward")}</DialogTitle>
-            <DialogDescription
-              className={
-                theme === "dark"
-                  ? "text-gray-400"
-                  : theme === "neon"
-                    ? "text-pink-300"
-                    : ""
-              }
-            >
-              {refillType &&
-                `${t("ads.refillDescription").replace("{name}", t(`powerups.${refillType}.name`))}`}
+            <DialogTitle>{t("powerups.outOfStock")}</DialogTitle>
+            <DialogDescription>
+              {refillType
+                ? t("ads.refillDescription").replace(
+                    "{name}",
+                    t(`powerups.${refillType}.name`),
+                  )
+                : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4 py-4">
-            <Button
-              onClick={handleWatchAd}
-              disabled={isWatchingAd}
-              className={`w-full ${
-                theme === "light"
-                  ? "bg-purple-600 hover:bg-purple-700"
-                  : theme === "dark"
-                    ? "bg-blue-600 hover:bg-blue-700"
-                    : "bg-pink-600 hover:bg-pink-700"
-              } text-white`}
-            >
-              {isWatchingAd ? t("ads.watchingAd") : t("powerups.watchAd")}
-            </Button>
-            <p className="text-sm text-center opacity-70">
+          <div className="flex flex-col gap-3">
+            {!isOffline && isNativeMobile() && (
+              <Button
+                onClick={handleWatchAd}
+                disabled={isWatchingAd}
+                data-ocid="powerup.confirm_button"
+              >
+                {isWatchingAd ? t("ads.watchingAd") : t("powerups.watchAd")}
+              </Button>
+            )}
+            <p className="text-sm text-muted-foreground text-center">
               {t("ads.orEarnFromLeaderboard")}
             </p>
+            <Button
+              variant="outline"
+              onClick={() => setShowRefillDialog(false)}
+              data-ocid="powerup.cancel_button"
+            >
+              {t("profile.close")}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

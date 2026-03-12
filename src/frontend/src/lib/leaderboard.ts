@@ -103,14 +103,15 @@ export function checkAndResetMonth(): void {
       "endless",
       "strategy",
       "powerBoost",
+      "advancedStrategy",
     ];
     const allEntries: { [key in GameMode]?: LeaderboardEntry[] } = {};
 
-    gameModes.forEach((mode) => {
+    for (const mode of gameModes) {
       allEntries[mode] = getLeaderboard(mode);
-    });
+    }
 
-    gameModes.forEach((mode) => {
+    for (const mode of gameModes) {
       const entries = allEntries[mode] || [];
       if (entries.length > 0) {
         if (entries[0]) addPowerUp(entries[0].userCode, "blockBreak", 5);
@@ -130,7 +131,7 @@ export function checkAndResetMonth(): void {
       }
 
       localStorage.removeItem(getLeaderboardKey(mode));
-    });
+    }
 
     localStorage.setItem(LAST_RESET_KEY, currentMonth);
   }

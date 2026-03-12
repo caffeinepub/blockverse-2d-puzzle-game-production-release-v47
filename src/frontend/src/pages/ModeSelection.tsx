@@ -12,12 +12,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getLeaderboard } from "@/lib/leaderboard";
 import { playSound } from "@/lib/sounds";
 import {
   Clock,
   Infinity as InfinityIcon,
   Sparkles,
   Target,
+  Trophy,
   Zap,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -31,9 +33,26 @@ export function ModeSelection({ onModeSelect }: ModeSelectionProps) {
   const { t } = useLanguage();
   const [theme, setTheme] = useState<Theme>("light");
   const [isVisible, setIsVisible] = useState(false);
+  const [bestScores, setBestScores] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), 100);
+    const modes: GameMode[] = [
+      "timeAttack",
+      "endless",
+      "strategy",
+      "powerBoost",
+      "advancedStrategy",
+    ];
+    const scores: Record<string, number> = {};
+    for (const mode of modes) {
+      const entries = getLeaderboard(mode);
+      const personal = localStorage.getItem(`blockverse-best-score-${mode}`);
+      scores[mode] = personal
+        ? Number.parseInt(personal, 10)
+        : entries[0]?.score || 0;
+    }
+    setBestScores(scores);
     return () => clearTimeout(timer);
   }, []);
 
@@ -112,29 +131,32 @@ export function ModeSelection({ onModeSelect }: ModeSelectionProps) {
     >
       {/* Animated particles */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        {[...Array(8)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute startup-particle-motion"
-            style={{
-              left: `${(i * 13 + 5) % 95}%`,
-              top: `${(i * 17 + 10) % 90}%`,
-              animationDelay: `${i * 0.8}s`,
-              animationDuration: `${12 + i * 1.5}s`,
-            }}
-          >
+        {[...Array(8)].map((_, i) => {
+          const particleKey = `mode-particle-${i}`;
+          return (
             <div
-              className={`w-8 h-8 sm:w-12 sm:h-12 rounded-full opacity-15 ${
-                theme === "light"
-                  ? "bg-purple-400"
-                  : theme === "dark"
-                    ? "bg-purple-500"
-                    : "bg-pink-500"
-              }`}
-              style={{ filter: "blur(6px)" }}
-            />
-          </div>
-        ))}
+              key={particleKey}
+              className="absolute startup-particle-motion"
+              style={{
+                left: `${(i * 13 + 5) % 95}%`,
+                top: `${(i * 17 + 10) % 90}%`,
+                animationDelay: `${i * 0.8}s`,
+                animationDuration: `${12 + i * 1.5}s`,
+              }}
+            >
+              <div
+                className={`w-8 h-8 sm:w-12 sm:h-12 rounded-full opacity-15 ${
+                  theme === "light"
+                    ? "bg-purple-400"
+                    : theme === "dark"
+                      ? "bg-purple-500"
+                      : "bg-pink-500"
+                }`}
+                style={{ filter: "blur(6px)" }}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Content */}
@@ -208,7 +230,24 @@ export function ModeSelection({ onModeSelect }: ModeSelectionProps) {
                       {t(`mode.${mode.id}.description`)}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="pt-0">
+                  <CardContent className="pt-0 flex flex-col gap-3">
+                    {bestScores[mode.id] > 0 && (
+                      <div
+                        className={`flex items-center justify-center gap-1.5 text-sm font-medium ${
+                          theme === "light"
+                            ? "text-yellow-600"
+                            : theme === "dark"
+                              ? "text-yellow-400"
+                              : "text-yellow-300"
+                        }`}
+                      >
+                        <Trophy className="w-4 h-4" />
+                        <span>
+                          {t("score.best")}:{" "}
+                          {bestScores[mode.id].toLocaleString()}
+                        </span>
+                      </div>
+                    )}
                     <Button
                       className="w-full h-12 text-base font-semibold"
                       size="lg"

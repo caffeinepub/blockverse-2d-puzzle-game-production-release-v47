@@ -104,10 +104,14 @@ function playChord(
 ) {
   if (!soundEnabled) return;
 
-  frequencies.forEach((freq) => {
+  for (const freq of frequencies) {
     playTone(freq, duration, type, volume);
-  });
+  }
 }
+
+// Module-level counter for cycling block placement pitch variants
+let blockPlaceCounter = 0;
+const BLOCK_PLACE_FREQUENCIES = [1200, 1500, 1000, 1800];
 
 // Enhanced block placement sound - impactful "spark" or "clink" effect
 function playBlockPlaceSound() {
@@ -123,16 +127,23 @@ function playBlockPlaceSound() {
     // Create a bright, satisfying "clink" sound with multiple harmonics
     const now = ctx.currentTime;
 
+    // Cycle through 4 pitch variants for variety
+    const baseFreq =
+      BLOCK_PLACE_FREQUENCIES[
+        blockPlaceCounter % BLOCK_PLACE_FREQUENCIES.length
+      ];
+    blockPlaceCounter++;
+
     // Main tone - bright and clear
     const mainOsc = ctx.createOscillator();
     const mainGain = ctx.createGain();
     const mainFilter = ctx.createBiquadFilter();
 
     mainOsc.type = "sine";
-    mainOsc.frequency.value = 1200; // Bright, clear frequency
+    mainOsc.frequency.value = baseFreq; // Cycling frequency for variety
 
     mainFilter.type = "bandpass";
-    mainFilter.frequency.value = 1200;
+    mainFilter.frequency.value = baseFreq;
     mainFilter.Q.value = 3.0; // Sharp, defined tone
 
     mainGain.gain.setValueAtTime(0.35, now);
@@ -150,7 +161,7 @@ function playBlockPlaceSound() {
     const harmGain = ctx.createGain();
 
     harmOsc.type = "sine";
-    harmOsc.frequency.value = 2400; // One octave higher
+    harmOsc.frequency.value = baseFreq * 2; // One octave higher
 
     harmGain.gain.setValueAtTime(0.15, now);
     harmGain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
@@ -271,7 +282,7 @@ function scheduleBgLoop(
     [14, 440.0, 2.0, 0.04], // A4
   ];
 
-  notes.forEach(([offset, freq, duration, vol]) => {
+  for (const [offset, freq, duration, vol] of notes) {
     scheduleBgMusicNote(
       ctx,
       masterGain,
@@ -280,7 +291,7 @@ function scheduleBgLoop(
       duration,
       vol,
     );
-  });
+  }
 
   // Add a soft bass pulse every 2 beats
   for (let i = 0; i < 8; i++) {
@@ -354,6 +365,56 @@ export function isBgMusicPlaying(): boolean {
   return bgMusicPlaying;
 }
 
+// Danger alert sound: rapid beep sequence 800→1000→800 Hz, triangle wave
+function playDangerAlertSound() {
+  if (!soundEnabled) return;
+  for (let repeat = 0; repeat < 3; repeat++) {
+    const offset = repeat * 300;
+    setTimeout(() => {
+      playTone(800, 0.1, "triangle", 0.35);
+      setTimeout(() => playTone(1000, 0.1, "triangle", 0.35), 100);
+      setTimeout(() => playTone(800, 0.1, "triangle", 0.35), 200);
+    }, offset);
+  }
+}
+
+// Chain reaction sound: descending cascade 1600→1200→900→600 Hz, sine wave
+function playChainReactionSound() {
+  if (!soundEnabled) return;
+  const freqs = [1600, 1200, 900, 600];
+  for (let i = 0; i < freqs.length; i++) {
+    const freq = freqs[i];
+    setTimeout(() => playTone(freq, 0.05, "sine", 0.3), i * 50);
+  }
+}
+
+// Obstacle warning sound: low rumble, triangle wave, frequency sweep 100→150 Hz
+function playObstacleWarningSound() {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(100, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(150, ctx.currentTime + 0.4);
+
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (error) {
+    console.warn("Obstacle warning sound failed:", error);
+  }
+}
+
 export function playSound(
   type:
     | "place"
@@ -365,7 +426,10 @@ export function playSound(
     | "badgeUnlock"
     | "gameOver"
     | "combo"
-    | "levelUp",
+    | "levelUp"
+    | "dangerAlert"
+    | "chainReaction"
+    | "obstacleWarning",
   level = 1,
 ) {
   if (!soundEnabled) return;
@@ -446,6 +510,18 @@ export function playSound(
       playTone(600, 0.15, "sine", 0.3);
       setTimeout(() => playTone(500, 0.15, "sine", 0.3), 150);
       setTimeout(() => playTone(400, 0.2, "sine", 0.3), 300);
+      break;
+
+    case "dangerAlert":
+      playDangerAlertSound();
+      break;
+
+    case "chainReaction":
+      playChainReactionSound();
+      break;
+
+    case "obstacleWarning":
+      playObstacleWarningSound();
       break;
   }
 }

@@ -69,6 +69,7 @@ export function InterstitialAdTrigger({
 
           <div className="text-center">
             <button
+              type="button"
               onClick={handleClose}
               className="text-sm underline opacity-75 hover:opacity-100 transition-opacity"
             >

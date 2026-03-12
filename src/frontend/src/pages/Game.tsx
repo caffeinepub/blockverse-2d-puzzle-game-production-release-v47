@@ -1,4 +1,5 @@
 import type { GameMode } from "@/App";
+import { AchievementsModal } from "@/components/AchievementsModal";
 import { AdvancedStrategyIndicators } from "@/components/AdvancedStrategyIndicators";
 import { BlockPicker } from "@/components/BlockPicker";
 import { DailyMissionsButton } from "@/components/DailyMissionsButton";
@@ -17,13 +18,23 @@ import { LeaderboardButton } from "@/components/LeaderboardButton";
 import { LevelTransition } from "@/components/LevelTransition";
 import { ParticleEffect } from "@/components/ParticleEffect";
 import { PowerUpBar } from "@/components/PowerUpBar";
+import { PowerUpGlowOverlay } from "@/components/PowerUpGlowOverlay";
 import { ScoreDisplay } from "@/components/ScoreDisplay";
 import { SoundToggle } from "@/components/SoundToggle";
+import { StatsModal } from "@/components/StatsModal";
 import { ThemeSelector } from "@/components/ThemeSelector";
 import { TimerDisplay } from "@/components/TimerDisplay";
+import { TutorialOverlay, isTutorialDone } from "@/components/TutorialOverlay";
 import { UserProfile } from "@/components/UserProfile";
 import { MobileInterstitialAd } from "@/components/ads/MobileInterstitialAd";
+import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useOfflineMode } from "@/contexts/OfflineModeContext";
+import {
+  checkAndUnlockAchievements,
+  getModesPlayed,
+  trackModePlayed,
+} from "@/lib/achievements";
 import { type BlockShape, generateBlockSet } from "@/lib/blockShapes";
 import {
   getDailyMissions,
@@ -32,6 +43,12 @@ import {
   updateWeeklyMissionProgress,
 } from "@/lib/dailyMissions";
 import { checkGameOver } from "@/lib/gameLogic";
+import {
+  clearSavedGame,
+  hasSavedGame,
+  loadGame,
+  saveGame,
+} from "@/lib/gameSave";
 import {
   type PowerUp,
   addPowerUp,
@@ -45,6 +62,7 @@ import {
   shouldShowLevelTransition,
 } from "@/lib/levelSystem";
 import { preloadAds } from "@/lib/mobileAds";
+import { updateStats } from "@/lib/playerStats";
 import {
   initSoundPreference,
   playBackgroundMusic,
@@ -52,6 +70,7 @@ import {
   stopBackgroundMusic,
 } from "@/lib/sounds";
 import { getUser } from "@/lib/userAuth";
+import { Home, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Theme = "light" | "dark" | "neon";
@@ -77,6 +96,7 @@ interface GameProps {
 
 export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
   const { isOffline } = useOfflineMode();
+  const { t } = useLanguage();
   const [theme, setTheme] = useState<Theme>("light");
   const [board, setBoard] = useState<(number | string)[][]>(() =>
     Array(8)
@@ -97,6 +117,11 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showDailyMissions, setShowDailyMissions] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [activePowerUp, setActivePowerUp] = useState<PowerUp["type"] | null>(
     null,
   );
@@ -112,8 +137,16 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
   // Mission tracking
   const [_powerUpsUsedThisGame, setPowerUpsUsedThisGame] = useState(0);
   const [_chainsTriggeredThisGame, setChainsTriggeredThisGame] = useState(0);
-  const [_totalLinesCleared, setTotalLinesCleared] = useState(0);
+  const [totalLinesCleared, setTotalLinesCleared] = useState(0);
   const [_gamesCompleted, _setGamesCompleted] = useState(0);
+
+  // New mission tracking states
+  const [_blocksPlacedCount, setBlocksPlacedCount] = useState(0);
+  const [maxComboReached, setMaxComboReached] = useState(0);
+  const [gameSurvivalSeconds, setGameSurvivalSeconds] = useState(0);
+  const survivalTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const dangerAlertTriggeredRef = useRef(false);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Time Attack mode state
   const [timeRemaining, setTimeRemaining] = useState(
@@ -144,7 +177,6 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
       preloadAds();
     }
     initSoundPreference();
-    // Start background music
     playBackgroundMusic();
     return () => {
       stopBackgroundMusic();
@@ -155,6 +187,22 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
   useEffect(() => {
     checkAndResetMonth();
   }, []);
+
+  // Track mode played for achievements
+  useEffect(() => {
+    if (user) {
+      trackModePlayed(user.code, gameMode);
+    }
+  }, [user, gameMode]);
+
+  // Check for saved game & show resume prompt
+  useEffect(() => {
+    if (hasSavedGame(gameMode)) {
+      setShowResumePrompt(true);
+    } else if (!isTutorialDone()) {
+      setShowTutorial(true);
+    }
+  }, [gameMode]);
 
   // Initialize game with first block set
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally run once on mount
@@ -171,64 +219,103 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
     }
   }, [user, currentLevel]);
 
-  // Advanced Strategy Mode: Initialize moving obstacles
+  // Survival time tracking: count up every second while game is active and not paused
   useEffect(() => {
-    if (gameMode === "advancedStrategy" && !isGameOver) {
-      // Initialize 3-5 random obstacles
-      const obstacleCount = 3 + Math.floor(Math.random() * 3);
-      const initialObstacles: MovingObstacle[] = [];
-
-      for (let i = 0; i < obstacleCount; i++) {
-        initialObstacles.push({
-          row: Math.floor(Math.random() * 8),
-          col: Math.floor(Math.random() * 8),
-          id: `obstacle-${i}-${Date.now()}`,
-        });
+    if (!isGameOver && !isPaused) {
+      survivalTimerRef.current = setInterval(() => {
+        setGameSurvivalSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (survivalTimerRef.current) {
+        clearInterval(survivalTimerRef.current);
+        survivalTimerRef.current = null;
       }
-
-      setMovingObstacles(initialObstacles);
     }
-  }, [gameMode, isGameOver]);
+    return () => {
+      if (survivalTimerRef.current) {
+        clearInterval(survivalTimerRef.current);
+        survivalTimerRef.current = null;
+      }
+    };
+  }, [isGameOver, isPaused]);
 
-  // Advanced Strategy Mode: Move obstacles periodically
+  // Auto-save every 10 seconds
+  useEffect(() => {
+    if (!isGameOver && !isPaused) {
+      autoSaveTimerRef.current = setInterval(() => {
+        saveGame({
+          board,
+          score,
+          currentBlocks,
+          currentLevel,
+          gameMode,
+          survivalSeconds: gameSurvivalSeconds,
+          timeRemaining: gameMode === "timeAttack" ? timeRemaining : undefined,
+          savedAt: new Date().toISOString(),
+        });
+      }, 10000);
+    } else {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    isGameOver,
+    isPaused,
+    board,
+    score,
+    currentBlocks,
+    currentLevel,
+    gameMode,
+    gameSurvivalSeconds,
+    timeRemaining,
+  ]);
+
+  // Danger alert: trigger when timeRemaining === 10 in timeAttack
   useEffect(() => {
     if (
-      gameMode === "advancedStrategy" &&
-      !isGameOver &&
-      movingObstacles.length > 0
+      gameMode === "timeAttack" &&
+      timeRemaining === 10 &&
+      !dangerAlertTriggeredRef.current
     ) {
-      obstacleTimerRef.current = setInterval(
-        () => {
-          setMovingObstacles((prev) =>
-            prev.map((obstacle) => {
-              // Random movement in any direction
-              const directions = [
-                { row: -1, col: 0 },
-                { row: 1, col: 0 },
-                { row: 0, col: -1 },
-                { row: 0, col: 1 },
-              ];
-              const direction =
-                directions[Math.floor(Math.random() * directions.length)];
-              const newRow = Math.max(
-                0,
-                Math.min(7, obstacle.row + direction.row),
-              );
-              const newCol = Math.max(
-                0,
-                Math.min(7, obstacle.col + direction.col),
-              );
+      dangerAlertTriggeredRef.current = true;
+      playSound("dangerAlert");
+    }
+  }, [gameMode, timeRemaining]);
 
-              return {
-                ...obstacle,
-                row: newRow,
-                col: newCol,
-              };
-            }),
-          );
-        },
-        12000 + Math.random() * 6000,
-      ); // 12-18 seconds
+  // Obstacle warning sound: trigger when showFallingBlockWarning becomes true
+  useEffect(() => {
+    if (showFallingBlockWarning) {
+      playSound("obstacleWarning");
+    }
+  }, [showFallingBlockWarning]);
+
+  // Advanced Strategy Mode: Moving Obstacles
+  useEffect(() => {
+    if (gameMode === "advancedStrategy" && !isGameOver && !isPaused) {
+      obstacleTimerRef.current = setInterval(() => {
+        setMovingObstacles((prev) => {
+          if (prev.length < 3) {
+            const newObstacle: MovingObstacle = {
+              row: Math.floor(Math.random() * 8),
+              col: Math.floor(Math.random() * 8),
+              id: `obstacle-${Date.now()}`,
+            };
+            return [...prev, newObstacle];
+          }
+          return prev.map((o) => ({
+            ...o,
+            col: (o.col + 1) % 8,
+          }));
+        });
+      }, 3000);
 
       return () => {
         if (obstacleTimerRef.current) {
@@ -236,47 +323,41 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         }
       };
     }
-  }, [gameMode, isGameOver, movingObstacles.length]);
+  }, [gameMode, isGameOver, isPaused]);
 
-  // Advanced Strategy Mode: Drop falling blocks periodically
+  // Advanced Strategy Mode: Falling Blocks
   useEffect(() => {
-    if (gameMode === "advancedStrategy" && !isGameOver) {
+    if (gameMode === "advancedStrategy" && !isGameOver && !isPaused) {
       fallingBlockTimerRef.current = setInterval(
         () => {
-          // Show warning 3 seconds before block falls
           setShowFallingBlockWarning(true);
-          playSound("button"); // Warning beep
+          setTimeout(() => setShowFallingBlockWarning(false), 3000);
 
-          setTimeout(() => {
-            setShowFallingBlockWarning(false);
+          const blockCount = 1 + Math.floor(Math.random() * 2);
+          const newFallingBlocks: FallingBlock[] = [];
 
-            // Drop 1-2 random blocks
-            const blockCount = 1 + Math.floor(Math.random() * 2);
-            const newFallingBlocks: FallingBlock[] = [];
+          for (let i = 0; i < blockCount; i++) {
+            const col = Math.floor(Math.random() * 8);
+            const colors = [
+              "from-red-500 to-orange-500",
+              "from-blue-500 to-cyan-500",
+              "from-green-500 to-emerald-500",
+              "from-purple-500 to-pink-500",
+            ];
 
-            for (let i = 0; i < blockCount; i++) {
-              const col = Math.floor(Math.random() * 8);
-              const colors = [
-                "from-red-500 to-orange-500",
-                "from-blue-500 to-cyan-500",
-                "from-green-500 to-emerald-500",
-                "from-purple-500 to-pink-500",
-              ];
+            newFallingBlocks.push({
+              row: 0,
+              col: col,
+              id: `falling-${Date.now()}-${i}`,
+              color: colors[Math.floor(Math.random() * colors.length)],
+            });
+          }
 
-              newFallingBlocks.push({
-                row: 0,
-                col: col,
-                id: `falling-${Date.now()}-${i}`,
-                color: colors[Math.floor(Math.random() * colors.length)],
-              });
-            }
-
-            setFallingBlocks((prev) => [...prev, ...newFallingBlocks]);
-            playSound("place");
-          }, 3000);
+          setFallingBlocks((prev) => [...prev, ...newFallingBlocks]);
+          playSound("place");
         },
         20000 + Math.random() * 10000,
-      ); // 20-30 seconds
+      );
 
       return () => {
         if (fallingBlockTimerRef.current) {
@@ -284,14 +365,15 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         }
       };
     }
-  }, [gameMode, isGameOver]);
+  }, [gameMode, isGameOver, isPaused]);
 
   // Advanced Strategy Mode: Animate falling blocks downward
   useEffect(() => {
     if (
       gameMode === "advancedStrategy" &&
       fallingBlocks.length > 0 &&
-      !isGameOver
+      !isGameOver &&
+      !isPaused
     ) {
       const animationTimer = setInterval(() => {
         setFallingBlocks((prev) => {
@@ -302,16 +384,15 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
             return block;
           });
 
-          // Place blocks that reached bottom or hit obstacle
           const toPlace = updated.filter(
             (block) => block.row === 7 || board[block.row + 1][block.col] !== 0,
           );
 
           if (toPlace.length > 0) {
             const newBoard = board.map((row) => [...row]);
-            toPlace.forEach((block) => {
+            for (const block of toPlace) {
               newBoard[block.row][block.col] = block.color;
-            });
+            }
             setBoard(newBoard);
           }
 
@@ -319,19 +400,20 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
             (block) => block.row < 7 && board[block.row + 1][block.col] === 0,
           );
         });
-      }, 500); // Move down every 500ms
+      }, 500);
 
       return () => clearInterval(animationTimer);
     }
-  }, [gameMode, fallingBlocks, board, isGameOver]);
+  }, [gameMode, fallingBlocks, board, isGameOver, isPaused]);
 
-  // Time Attack timer
+  // Time Attack timer - pause-aware
   useEffect(() => {
     if (
       gameMode === "timeAttack" &&
       isTimerActive &&
       timeRemaining > 0 &&
-      !isGameOver
+      !isGameOver &&
+      !isPaused
     ) {
       const timer = setInterval(() => {
         setTimeRemaining((prev) => {
@@ -341,9 +423,18 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
             playSound("gameOver");
             if (user && score > 0) {
               updateLeaderboard(user.username, user.code, score, gameMode);
-              // Update mission: complete game
               updateMissionProgress(user.code, "completeGames", 1);
               updateWeeklyMissionProgress(user.code, "completeGames", 1);
+              updateMissionProgress(
+                user.code,
+                "surviveTime",
+                gameSurvivalSeconds,
+              );
+              updateWeeklyMissionProgress(
+                user.code,
+                "surviveTime",
+                gameSurvivalSeconds,
+              );
             }
             if (!isOffline) {
               setTimeout(() => setShowInterstitialAd(true), 1500);
@@ -360,9 +451,11 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
     isTimerActive,
     timeRemaining,
     isGameOver,
+    isPaused,
     user,
     score,
     isOffline,
+    gameSurvivalSeconds,
   ]);
 
   // Update blocks when level changes
@@ -380,11 +473,38 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         setIsGameOver(true);
         playSound("gameOver");
 
+        // Clear saved game
+        clearSavedGame(gameMode);
+
         if (user && score > 0) {
           updateLeaderboard(user.username, user.code, score, gameMode);
-          // Update mission: complete game
           updateMissionProgress(user.code, "completeGames", 1);
           updateWeeklyMissionProgress(user.code, "completeGames", 1);
+          updateMissionProgress(user.code, "surviveTime", gameSurvivalSeconds);
+          updateWeeklyMissionProgress(
+            user.code,
+            "surviveTime",
+            gameSurvivalSeconds,
+          );
+
+          // Update player stats
+          const updatedStats = updateStats(user.code, {
+            totalGames: 1,
+            totalLinesCleared: totalLinesCleared,
+            totalScore: score,
+            totalTimePlayed: gameSurvivalSeconds,
+            bestScore: score,
+            bestCombo: maxComboReached,
+            powerUpsUsed: _powerUpsUsedThisGame,
+          });
+
+          // Check achievements
+          const modesPlayed = getModesPlayed(user.code);
+          checkAndUnlockAchievements(user.code, updatedStats, {
+            comboLines: maxComboReached,
+            survivalSeconds: gameSurvivalSeconds,
+            modesPlayed,
+          });
         }
 
         if (!isOffline) {
@@ -394,7 +514,19 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         }
       }
     }
-  }, [currentBlocks, board, isGameOver, score, user, isOffline, gameMode]);
+  }, [
+    currentBlocks,
+    board,
+    isGameOver,
+    score,
+    user,
+    isOffline,
+    gameMode,
+    gameSurvivalSeconds,
+    totalLinesCleared,
+    maxComboReached,
+    _powerUpsUsedThisGame,
+  ]);
 
   // Update best score
   useEffect(() => {
@@ -420,12 +552,9 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
 
   // Cleanup function for timers and state when navigating home
   const cleanupGameState = useCallback(() => {
-    // Stop Time Attack timer
     if (gameMode === "timeAttack") {
       setIsTimerActive(false);
     }
-
-    // Clear Advanced Strategy Mode timers
     if (obstacleTimerRef.current) {
       clearInterval(obstacleTimerRef.current);
       obstacleTimerRef.current = null;
@@ -434,8 +563,10 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
       clearInterval(fallingBlockTimerRef.current);
       fallingBlockTimerRef.current = null;
     }
-
-    // Reset Advanced Strategy Mode state
+    if (autoSaveTimerRef.current) {
+      clearInterval(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
     setMovingObstacles([]);
     setFallingBlocks([]);
     setPowerUpChainActive(false);
@@ -451,17 +582,17 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
       blockIndex: number,
     ) => {
       setBoard(newBoard);
+      setBlocksPlacedCount((prev) => prev + 1);
 
       const oldScore = score;
 
-      // Apply mode-specific scoring
       let modeMultiplier = 1;
       if (gameMode === "timeAttack" && timeRemaining <= 30) {
-        modeMultiplier = 1.5; // 1.5x points in final 30 seconds
+        modeMultiplier = 1.5;
       } else if (gameMode === "powerBoost") {
-        modeMultiplier = 1.2; // 1.2x points in power boost mode
+        modeMultiplier = 1.2;
       } else if (gameMode === "advancedStrategy") {
-        modeMultiplier = 1.3; // 1.3x points in advanced strategy mode
+        modeMultiplier = 1.3;
       }
 
       const bonusPoints = Math.floor(
@@ -472,7 +603,6 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
       setScore(newScore);
       setComboLines(linesCleared);
 
-      // Update mission progress (daily + weekly)
       if (user) {
         if (linesCleared > 0) {
           updateMissionProgress(user.code, "clearTotalLines", linesCleared);
@@ -486,24 +616,24 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         if (linesCleared >= 3) {
           updateMissionProgress(user.code, "clearLines", 1);
           updateWeeklyMissionProgress(user.code, "clearLines", 1);
-        }
-        if (linesCleared >= 3) {
           updateMissionProgress(user.code, "comboMultiplier", 1);
           updateWeeklyMissionProgress(user.code, "comboMultiplier", 1);
+          updateMissionProgress(user.code, "achieveCombo", 1);
+          updateWeeklyMissionProgress(user.code, "achieveCombo", 1);
+          setMaxComboReached((prev) => Math.max(prev, linesCleared));
         }
-        // Update score mission
         updateMissionProgress(user.code, "scorePoints", bonusPoints);
         updateWeeklyMissionProgress(user.code, "scorePoints", bonusPoints);
+        updateMissionProgress(user.code, "placeBlocksCount", 1);
+        updateWeeklyMissionProgress(user.code, "placeBlocksCount", 1);
       }
 
-      // Time Attack: Add bonus time for clearing lines
       if (gameMode === "timeAttack" && linesCleared > 0) {
         const timeBonus =
           linesCleared === 1 ? 10 : 15 * (linesCleared - 1) + 10;
-        setTimeRemaining((prev) => Math.min(prev + timeBonus, 300)); // Cap at 5 minutes
+        setTimeRemaining((prev) => Math.min(prev + timeBonus, 300));
       }
 
-      // Check for level transition
       const transition = shouldShowLevelTransition(oldScore, newScore);
       if (transition.shouldShow) {
         setTransitionLevel(transition.newLevel);
@@ -537,6 +667,18 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
           setCurrentBlocks(generateBlockSet(getLevelFromScore(newScore)));
         }, 300);
       }
+
+      // Auto-save on block placed
+      saveGame({
+        board: newBoard,
+        score: newScore,
+        currentBlocks: updatedBlocks,
+        currentLevel,
+        gameMode,
+        survivalSeconds: gameSurvivalSeconds,
+        timeRemaining: gameMode === "timeAttack" ? timeRemaining : undefined,
+        savedAt: new Date().toISOString(),
+      });
     },
     [
       currentBlocks,
@@ -547,14 +689,16 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
       gameMode,
       timeRemaining,
       user,
+      gameSurvivalSeconds,
     ],
   );
 
   const handleRestart = useCallback(() => {
     playSound("button");
+    clearSavedGame(gameMode);
     cleanupGameState();
     onBackToModeSelection();
-  }, [onBackToModeSelection, cleanupGameState]);
+  }, [onBackToModeSelection, cleanupGameState, gameMode]);
 
   const handleNavigateHome = useCallback(() => {
     playSound("button");
@@ -566,28 +710,24 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
     (type: PowerUp["type"]) => {
       setSelectedBlockIndex(null);
 
-      // Update mission progress
       if (user) {
         updateMissionProgress(user.code, "usePowerUps", 1);
         updateWeeklyMissionProgress(user.code, "usePowerUps", 1);
         setPowerUpsUsedThisGame((prev) => prev + 1);
       }
 
-      // Advanced Strategy Mode: Power-up chain system
       if (gameMode === "advancedStrategy" && !powerUpChainActive) {
         setPowerUpChainActive(true);
         setChainedPowerUps([type]);
         setActivePowerUp(type);
         playSound("powerUp");
 
-        // Update mission: trigger chain
         if (user) {
           updateMissionProgress(user.code, "triggerChains", 1);
           updateWeeklyMissionProgress(user.code, "triggerChains", 1);
           setChainsTriggeredThisGame((prev) => prev + 1);
         }
 
-        // Chain effect: trigger another random power-up after 1 second
         setTimeout(() => {
           const availablePowerUps: PowerUp["type"][] = [
             "blockBreak",
@@ -599,9 +739,8 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
               Math.floor(Math.random() * availablePowerUps.length)
             ];
           setChainedPowerUps((prev) => [...prev, nextPowerUp]);
-          playSound("combo", currentLevel);
+          playSound("chainReaction");
 
-          // Add bonus points for chain
           setScore((prev) => prev + 75);
           setParticleEffect({ type: "combo", position: { x: 50, y: 50 } });
 
@@ -633,7 +772,6 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         );
         setScore((prev) => prev + bonusPoints);
 
-        // Update mission progress
         if (user) {
           updateMissionProgress(user.code, "scorePoints", bonusPoints);
         }
@@ -642,7 +780,6 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         setComboLines(linesCleared);
         playSound("clear", currentLevel);
 
-        // Update mission progress
         if (user) {
           updateMissionProgress(user.code, "clearTotalLines", linesCleared);
         }
@@ -678,6 +815,28 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
     playSound("rankUp");
   }, []);
 
+  const handleResumeGame = useCallback(() => {
+    const saved = loadGame(gameMode);
+    if (saved) {
+      setBoard(saved.board);
+      setScore(saved.score);
+      setCurrentBlocks(saved.currentBlocks);
+      setGameSurvivalSeconds(saved.survivalSeconds);
+      if (saved.timeRemaining !== undefined) {
+        setTimeRemaining(saved.timeRemaining);
+      }
+    }
+    setShowResumePrompt(false);
+  }, [gameMode]);
+
+  const handleNewGame = useCallback(() => {
+    clearSavedGame(gameMode);
+    setShowResumePrompt(false);
+    if (!isTutorialDone()) {
+      setShowTutorial(true);
+    }
+  }, [gameMode]);
+
   const getBackgroundClass = () => {
     const baseTransition = backgroundTransitioning
       ? "transition-all duration-1000"
@@ -695,6 +854,39 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
     }
   };
 
+  const getPauseOverlayClass = () => {
+    switch (theme) {
+      case "dark":
+        return "bg-gray-900 border border-gray-700 text-gray-100";
+      case "neon":
+        return "bg-black border-2 border-pink-500 text-pink-100 shadow-[0_0_40px_rgba(236,72,153,0.5)]";
+      default:
+        return "bg-white border border-purple-200 text-gray-800";
+    }
+  };
+
+  const getPauseBtnClass = () => {
+    switch (theme) {
+      case "dark":
+        return "bg-blue-600 hover:bg-blue-700 text-white";
+      case "neon":
+        return "bg-pink-600 hover:bg-pink-700 text-white";
+      default:
+        return "bg-purple-600 hover:bg-purple-700 text-white";
+    }
+  };
+
+  const getResumeTitleClass = () => {
+    switch (theme) {
+      case "dark":
+        return "text-white";
+      case "neon":
+        return "text-pink-300";
+      default:
+        return "text-purple-700";
+    }
+  };
+
   return (
     <div
       className={`min-h-[100dvh] flex flex-col ${getBackgroundClass()} relative overflow-hidden`}
@@ -709,14 +901,15 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {[...Array(levelConfig.visualEffects.particleCount)].map((_, i) => (
           <img
+            // biome-ignore lint/suspicious/noArrayIndexKey: decorative background particles — fixed count per level, never reordered
             key={i}
             src={levelConfig.particleImage}
             alt=""
             className="absolute w-8 h-8 sm:w-12 sm:h-12 opacity-30 animate-float"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
+              left: `${(i * 9 + 5) % 95}%`,
+              top: `${(i * 11 + 7) % 90}%`,
+              animationDelay: `${(i * 0.7) % 5}s`,
               animationDuration: `${8 / levelConfig.visualEffects.animationSpeed}s`,
             }}
           />
@@ -732,8 +925,14 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
             setShowDailyMissions(true);
           }}
           onNavigateHome={handleNavigateHome}
+          onPause={() => setIsPaused((p) => !p)}
+          onOpenStats={user ? () => setShowStats(true) : undefined}
+          onOpenAchievements={
+            user ? () => setShowAchievements(true) : undefined
+          }
           theme={theme}
           playerLevel={currentLevel}
+          isPaused={isPaused}
         />
 
         <main className="flex-1 container mx-auto px-2 sm:px-4 md:px-6 py-1 sm:py-2 md:py-4 flex flex-col items-center justify-center gap-1 sm:gap-2 md:gap-4">
@@ -773,31 +972,34 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
             )}
           </div>
 
-          <GameBoard
-            board={board}
-            selectedBlock={
-              selectedBlockIndex !== null
-                ? currentBlocks[selectedBlockIndex]
-                : null
-            }
-            onBlockPlaced={(newBoard, points, linesCleared) => {
-              if (selectedBlockIndex !== null) {
-                handleBlockPlaced(
-                  newBoard,
-                  points,
-                  linesCleared,
-                  selectedBlockIndex,
-                );
+          <div className="relative">
+            <PowerUpGlowOverlay activePowerUp={activePowerUp} theme={theme} />
+            <GameBoard
+              board={board}
+              selectedBlock={
+                selectedBlockIndex !== null
+                  ? currentBlocks[selectedBlockIndex]
+                  : null
               }
-            }}
-            theme={theme}
-            activePowerUp={activePowerUp}
-            onPowerUpUsed={handlePowerUpUsed}
-            levelConfig={levelConfig}
-            gameMode={gameMode}
-            movingObstacles={movingObstacles}
-            fallingBlocks={fallingBlocks}
-          />
+              onBlockPlaced={(newBoard, points, linesCleared) => {
+                if (selectedBlockIndex !== null && !isPaused) {
+                  handleBlockPlaced(
+                    newBoard,
+                    points,
+                    linesCleared,
+                    selectedBlockIndex,
+                  );
+                }
+              }}
+              theme={theme}
+              activePowerUp={activePowerUp}
+              onPowerUpUsed={handlePowerUpUsed}
+              levelConfig={levelConfig}
+              gameMode={gameMode}
+              movingObstacles={movingObstacles}
+              fallingBlocks={fallingBlocks}
+            />
+          </div>
 
           <div className="w-full max-w-[min(90vw,600px)] flex flex-col items-center gap-0.5 sm:gap-1.5">
             <div
@@ -809,19 +1011,21 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
                     : "text-pink-300"
               }`}
             >
-              Sıradaki Bloklar
+              {t("game.nextBlocks")}
             </div>
             <BlockPicker
               blocks={currentBlocks}
               selectedIndex={selectedBlockIndex}
               onSelectBlock={(index) => {
-                playSound("button");
-                setSelectedBlockIndex(index);
-                if (activePowerUp) {
-                  setActivePowerUp(null);
+                if (!isPaused) {
+                  playSound("button");
+                  setSelectedBlockIndex(index);
+                  if (activePowerUp) {
+                    setActivePowerUp(null);
+                  }
                 }
               }}
-              disabled={isGameOver}
+              disabled={isGameOver || isPaused}
               theme={theme}
             />
           </div>
@@ -860,6 +1064,87 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
         </>
       )}
 
+      {/* Pause overlay */}
+      {isPaused && !isGameOver && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div
+            className={`w-full max-w-xs rounded-2xl p-6 shadow-2xl flex flex-col gap-3 ${getPauseOverlayClass()}`}
+            data-ocid="pause.modal"
+          >
+            <h2
+              className={`text-2xl font-bold text-center mb-2 ${getResumeTitleClass()}`}
+            >
+              {t("pause.title")}
+            </h2>
+            <Button
+              size="lg"
+              className={`w-full flex items-center gap-2 justify-center ${getPauseBtnClass()}`}
+              onClick={() => setIsPaused(false)}
+              data-ocid="pause.confirm_button"
+            >
+              <Play className="w-4 h-4" />
+              {t("pause.resume")}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full flex items-center gap-2 justify-center"
+              onClick={handleRestart}
+              data-ocid="pause.secondary_button"
+            >
+              <RotateCcw className="w-4 h-4" />
+              {t("pause.restart")}
+            </Button>
+            <Button
+              size="lg"
+              variant="ghost"
+              className="w-full flex items-center gap-2 justify-center"
+              onClick={handleNavigateHome}
+              data-ocid="pause.cancel_button"
+            >
+              <Home className="w-4 h-4" />
+              {t("pause.home")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Resume prompt */}
+      {showResumePrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div
+            className={`w-full max-w-xs rounded-2xl p-6 shadow-2xl flex flex-col gap-3 ${getPauseOverlayClass()}`}
+            data-ocid="resume.dialog"
+          >
+            <h2
+              className={`text-xl font-bold text-center mb-1 ${getResumeTitleClass()}`}
+            >
+              {t("resume.title")}
+            </h2>
+            <p className="text-sm text-center opacity-70">
+              {t("resume.description").replace("{mode}", gameMode)}
+            </p>
+            <Button
+              size="lg"
+              className={`w-full ${getPauseBtnClass()}`}
+              onClick={handleResumeGame}
+              data-ocid="resume.confirm_button"
+            >
+              {t("resume.continue")}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full"
+              onClick={handleNewGame}
+              data-ocid="resume.cancel_button"
+            >
+              {t("resume.new")}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isGameOver && (
         <GameOver
           score={score}
@@ -869,7 +1154,6 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
           userCode={user?.code}
           isOffline={isOffline}
           onRewardEarned={() => {
-            // Update PowerUpBar after reward
             window.dispatchEvent(new Event("storage"));
           }}
         />
@@ -931,6 +1215,32 @@ export function Game({ onLogout, gameMode, onBackToModeSelection }: GameProps) {
           theme={theme}
           show={showInterstitialAd}
           onClose={() => setShowInterstitialAd(false)}
+        />
+      )}
+
+      {/* Tutorial overlay */}
+      {showTutorial && (
+        <TutorialOverlay
+          theme={theme}
+          onComplete={() => setShowTutorial(false)}
+        />
+      )}
+
+      {/* Stats modal */}
+      {showStats && user && (
+        <StatsModal
+          theme={theme}
+          userCode={user.code}
+          onClose={() => setShowStats(false)}
+        />
+      )}
+
+      {/* Achievements modal */}
+      {showAchievements && user && (
+        <AchievementsModal
+          theme={theme}
+          userCode={user.code}
+          onClose={() => setShowAchievements(false)}
         />
       )}
     </div>

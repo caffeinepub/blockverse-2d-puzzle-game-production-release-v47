@@ -153,9 +153,10 @@ export function UserProfile({ theme, onClose, onLogout }: UserProfileProps) {
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${getOverlayClass()} backdrop-blur-sm`}
       onClick={handleClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="profile-title"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === "Escape") handleClose();
+      }}
+      aria-hidden="true"
     >
       <Card
         className={`w-full max-w-md ${getCardClass()} animate-in fade-in zoom-in duration-300`}
@@ -229,7 +230,11 @@ export function UserProfile({ theme, onClose, onLogout }: UserProfileProps) {
 
           <div className="flex items-center justify-center pt-2">
             <button
+              type="button"
               onClick={handlePrivacyClick}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handlePrivacyClick();
+              }}
               className={`text-xs sm:text-sm font-medium ${getPrivacyLinkClass()} hover:underline transition-colors duration-200 flex items-center gap-1.5`}
               aria-label={t("profile.privacyPolicy")}
             >

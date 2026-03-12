@@ -232,17 +232,20 @@ export function DailyRewardModal({ theme, onClaim }: DailyRewardModalProps) {
             {/* Particles */}
             {showParticles && (
               <div className="absolute inset-0 pointer-events-none">
-                {[...Array(12)].map((_, i) => (
-                  <Sparkles
-                    key={i}
-                    className="absolute w-6 h-6 text-yellow-400 animate-ping"
-                    style={{
-                      left: `${Math.random() * 100}%`,
-                      top: `${Math.random() * 100}%`,
-                      animationDelay: `${Math.random() * 0.5}s`,
-                    }}
-                  />
-                ))}
+                {[...Array(12)].map((_, i) => {
+                  const sparkleKey = `sparkle-${i}`;
+                  return (
+                    <Sparkles
+                      key={sparkleKey}
+                      className="absolute w-6 h-6 text-yellow-400 animate-ping"
+                      style={{
+                        left: `${(i * 8 + 5) % 95}%`,
+                        top: `${(i * 7 + 10) % 85}%`,
+                        animationDelay: `${(i * 0.1) % 0.5}s`,
+                      }}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>

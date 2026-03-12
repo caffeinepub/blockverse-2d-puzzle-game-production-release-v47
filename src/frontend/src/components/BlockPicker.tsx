@@ -68,7 +68,9 @@ export function BlockPicker({
 
         return (
           <button
+            // biome-ignore lint/suspicious/noArrayIndexKey: block positions are positional and stable within a render cycle
             key={index}
+            type="button"
             onClick={() => !disabled && onSelectBlock(index)}
             disabled={disabled}
             className={`
@@ -93,11 +95,12 @@ export function BlockPicker({
             >
               {block.shape.map((row, rowIndex) =>
                 row.map((cell, colIndex) => {
+                  const cellKey = `small-${rowIndex}-${colIndex}`;
                   // Check if this cell is filled
                   if (cell !== 1) {
                     return (
                       <div
-                        key={`${rowIndex}-${colIndex}`}
+                        key={cellKey}
                         className="bg-transparent"
                         style={{
                           width: `${cellSize}px`,
@@ -131,14 +134,14 @@ export function BlockPicker({
 
                   return (
                     <div
-                      key={`${rowIndex}-${colIndex}`}
+                      key={cellKey}
                       className={`
-                                                transition-all
-                                                bg-gradient-to-br ${block.color}
-                                                ${borderClasses}
-                                                border-black/20
-                                                ${theme === "neon" ? "shadow-[0_0_4px_rgba(236,72,153,0.3)]" : "shadow-sm"}
-                                            `}
+                                              transition-all
+                                              bg-gradient-to-br ${block.color}
+                                              ${borderClasses}
+                                              border-black/20
+                                              ${theme === "neon" ? "shadow-[0_0_4px_rgba(236,72,153,0.3)]" : "shadow-sm"}
+                                          `}
                       style={{
                         width: `${cellSize}px`,
                         height: `${cellSize}px`,
@@ -160,11 +163,12 @@ export function BlockPicker({
             >
               {block.shape.map((row, rowIndex) =>
                 row.map((cell, colIndex) => {
+                  const lgCellKey = `large-${rowIndex}-${colIndex}`;
                   // Check if this cell is filled
                   if (cell !== 1) {
                     return (
                       <div
-                        key={`${rowIndex}-${colIndex}`}
+                        key={lgCellKey}
                         className="bg-transparent"
                         style={{
                           width: `${cellSizeSm}px`,
@@ -198,14 +202,14 @@ export function BlockPicker({
 
                   return (
                     <div
-                      key={`${rowIndex}-${colIndex}`}
+                      key={lgCellKey}
                       className={`
-                                                transition-all
-                                                bg-gradient-to-br ${block.color}
-                                                ${borderClasses}
-                                                border-black/20
-                                                ${theme === "neon" ? "shadow-[0_0_6px_rgba(236,72,153,0.3)]" : "shadow-sm"}
-                                            `}
+                                              transition-all
+                                              bg-gradient-to-br ${block.color}
+                                              ${borderClasses}
+                                              border-black/20
+                                              ${theme === "neon" ? "shadow-[0_0_6px_rgba(236,72,153,0.3)]" : "shadow-sm"}
+                                          `}
                       style={{
                         width: `${cellSizeSm}px`,
                         height: `${cellSizeSm}px`,

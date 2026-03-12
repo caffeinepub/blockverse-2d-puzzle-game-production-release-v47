@@ -5,7 +5,10 @@ export type MissionType =
   | "triggerChains"
   | "completeGames"
   | "clearTotalLines"
-  | "comboMultiplier";
+  | "comboMultiplier"
+  | "placeBlocksCount"
+  | "achieveCombo"
+  | "surviveTime";
 
 export type RewardType = "points" | "powerUps" | "comboBoost";
 
@@ -106,6 +109,27 @@ const MISSION_TEMPLATES: Array<{
     levelMultiplier: 0.3,
     rewardType: "comboBoost",
     baseReward: 1.5,
+  },
+  {
+    type: "placeBlocksCount",
+    baseTarget: 20,
+    levelMultiplier: 5,
+    rewardType: "points",
+    baseReward: 200,
+  },
+  {
+    type: "achieveCombo",
+    baseTarget: 3,
+    levelMultiplier: 0.3,
+    rewardType: "powerUps",
+    baseReward: 1,
+  },
+  {
+    type: "surviveTime",
+    baseTarget: 60,
+    levelMultiplier: 10,
+    rewardType: "points",
+    baseReward: 350,
   },
 ];
 
@@ -513,5 +537,72 @@ export function getWeeklyResetTimeRemaining(userCode: string): number {
     return Math.max(0, remaining);
   } catch {
     return 0;
+  }
+}
+
+// Streak tracking
+interface StreakData {
+  count: number;
+  lastUpdatedDate: string;
+}
+
+function getStreakStorageKey(userCode: string): string {
+  return `blockverse-mission-streak-${userCode}`;
+}
+
+export function getStreakCount(userCode: string): number {
+  const saved = localStorage.getItem(getStreakStorageKey(userCode));
+  if (!saved) return 0;
+  try {
+    const data: StreakData = JSON.parse(saved);
+    return data.count;
+  } catch {
+    return 0;
+  }
+}
+
+export function updateStreak(userCode: string): void {
+  const storageKey = getStorageKey(userCode);
+  const saved = localStorage.getItem(storageKey);
+  if (!saved) return;
+
+  try {
+    const data: DailyMissionsData = JSON.parse(saved);
+    const allCompleted = data.missions.every((m) => m.completed);
+    if (!allCompleted) return;
+
+    const streakKey = getStreakStorageKey(userCode);
+    const streakSaved = localStorage.getItem(streakKey);
+    const today = new Date().toISOString().split("T")[0];
+
+    if (!streakSaved) {
+      const newStreak: StreakData = { count: 1, lastUpdatedDate: today };
+      localStorage.setItem(streakKey, JSON.stringify(newStreak));
+      return;
+    }
+
+    const streakData: StreakData = JSON.parse(streakSaved);
+    const lastDate = new Date(streakData.lastUpdatedDate);
+    const todayDate = new Date(today);
+    const daysDiff =
+      (todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    if (daysDiff < 1) {
+      // Already updated today, skip
+      return;
+    }
+    if (daysDiff <= 2) {
+      // Continue streak
+      streakData.count += 1;
+      streakData.lastUpdatedDate = today;
+    } else {
+      // Streak broken (>2 days gap), reset
+      streakData.count = 1;
+      streakData.lastUpdatedDate = today;
+    }
+
+    localStorage.setItem(streakKey, JSON.stringify(streakData));
+  } catch {
+    // Ignore errors
   }
 }

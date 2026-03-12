@@ -2,6 +2,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { PowerUp } from "@/lib/leaderboard";
 import type { Theme } from "@/pages/Game";
 import { AlertTriangle, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface AdvancedStrategyIndicatorsProps {
   theme: Theme;
@@ -17,6 +18,24 @@ export function AdvancedStrategyIndicators({
   chainedPowerUps,
 }: AdvancedStrategyIndicatorsProps) {
   const { t } = useLanguage();
+  const [countdown, setCountdown] = useState(3);
+
+  // Countdown 3→2→1 when falling block warning is shown
+  useEffect(() => {
+    if (showFallingBlockWarning) {
+      setCountdown(3);
+      const interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 1;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [showFallingBlockWarning]);
 
   const getWarningClass = () => {
     switch (theme) {
@@ -54,6 +73,10 @@ export function AdvancedStrategyIndicators({
           <span className="text-xs sm:text-sm font-bold">
             {t("advancedStrategy.fallingBlockWarning")}
           </span>
+          {/* Countdown indicator */}
+          <span className="text-lg sm:text-xl font-black tabular-nums min-w-[1.5rem] text-center">
+            {countdown}
+          </span>
           <img
             src="/assets/generated/falling-block-warning-transparent.dim_64x64.png"
             alt="Warning"
@@ -69,6 +92,21 @@ export function AdvancedStrategyIndicators({
           <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
           <span className="text-xs sm:text-sm font-bold">
             {t("advancedStrategy.powerUpChain")} ({chainedPowerUps.length}x)
+          </span>
+          {/* Chain lightning flicker dots */}
+          <span className="flex items-center gap-0.5">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-current animate-ping"
+              style={{ animationDuration: "0.6s" }}
+            />
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-current animate-ping"
+              style={{ animationDelay: "0.15s", animationDuration: "0.6s" }}
+            />
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-current animate-ping"
+              style={{ animationDelay: "0.3s", animationDuration: "0.6s" }}
+            />
           </span>
           <img
             src="/assets/generated/power-up-chain-effect-transparent.dim_200x200.png"

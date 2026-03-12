@@ -1,3 +1,4 @@
+import { RewardPopup } from "@/components/RewardPopup";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,13 +8,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { addPowerUp } from "@/lib/leaderboard";
+import { type PowerUp, addPowerUp } from "@/lib/leaderboard";
 import {
   getRandomPowerUpType,
   isNativeMobile,
   showRewardedAd,
   trackMobileAdEvent,
 } from "@/lib/mobileAds";
+import {
+  getAdsRemainingToday,
+  incrementAdsWatched,
+} from "@/lib/rewardedAdTracking";
 import { playSound } from "@/lib/sounds";
 import type { Theme } from "@/pages/Game";
 import { Gift, Loader2 } from "lucide-react";
@@ -35,6 +40,12 @@ export function MobileRewardedAdButton({
   const { t } = useLanguage();
   const [showAdDialog, setShowAdDialog] = useState(false);
   const [_isLoading, setIsLoading] = useState(false);
+  const [adsRemaining, setAdsRemaining] = useState(() =>
+    getAdsRemainingToday(userCode),
+  );
+  const [rewardedPowerUp, setRewardedPowerUp] = useState<
+    PowerUp["type"] | null
+  >(null);
 
   // Use web rewarded ad for non-mobile environments
   if (!isNativeMobile()) {
@@ -69,6 +80,7 @@ export function MobileRewardedAdButton({
   };
 
   const handleWatchAd = () => {
+    if (adsRemaining <= 0) return;
     playSound("button");
     setShowAdDialog(true);
     setIsLoading(true);
@@ -80,6 +92,8 @@ export function MobileRewardedAdButton({
         const powerUpType = getRandomPowerUpType();
         addPowerUp(userCode, powerUpType, 1);
         trackMobileAdEvent("rewarded", "rewarded");
+        incrementAdsWatched(userCode);
+        setAdsRemaining(getAdsRemainingToday(userCode));
 
         playSound("powerUp");
         toast.success(t("ads.rewardEarned"), {
@@ -92,6 +106,7 @@ export function MobileRewardedAdButton({
 
         setShowAdDialog(false);
         setIsLoading(false);
+        setRewardedPowerUp(powerUpType);
 
         if (onRewardEarned) {
           onRewardEarned();
@@ -108,11 +123,29 @@ export function MobileRewardedAdButton({
     );
   };
 
+  const isLimitReached = adsRemaining <= 0;
+
   return (
     <>
-      <Button onClick={handleWatchAd} className={getButtonClass()} size="lg">
+      {rewardedPowerUp && (
+        <RewardPopup
+          powerUpType={rewardedPowerUp}
+          theme={theme}
+          onDismiss={() => setRewardedPowerUp(null)}
+        />
+      )}
+
+      <Button
+        onClick={handleWatchAd}
+        className={`${getButtonClass()} ${isLimitReached ? "opacity-50 cursor-not-allowed" : ""}`}
+        size="lg"
+        disabled={isLimitReached}
+        data-ocid="gameover.primary_button"
+      >
         <Gift className="w-5 h-5" />
-        {t("ads.watchForReward")}
+        {isLimitReached
+          ? t("ads.comeBackTomorrow") || "Come back tomorrow"
+          : `${t("ads.watchForReward")} (${adsRemaining} left)`}
       </Button>
 
       <Dialog open={showAdDialog} onOpenChange={setShowAdDialog}>

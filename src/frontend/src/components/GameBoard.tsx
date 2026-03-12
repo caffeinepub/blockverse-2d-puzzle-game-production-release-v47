@@ -545,12 +545,14 @@ export function GameBoard({
     >
       {board.map((row, rowIndex) =>
         row.map((_, colIndex) => {
+          const boardCellKey = `cell-${rowIndex}-${colIndex}`;
           const hasObstacle = isObstacleAt(rowIndex, colIndex);
           return (
             <div
-              key={`${rowIndex}-${colIndex}`}
+              key={boardCellKey}
               className={getCellClass(rowIndex, colIndex)}
               onClick={() => handleCellClick(rowIndex, colIndex)}
+              onKeyDown={() => handleCellClick(rowIndex, colIndex)}
               onMouseEnter={() => handleCellHover(rowIndex, colIndex)}
             >
               {hasObstacle && (

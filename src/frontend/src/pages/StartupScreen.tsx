@@ -172,31 +172,34 @@ export function StartupScreen({ onLogin }: StartupScreenProps) {
 
       {/* Enhanced animated particles with better distribution */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        {[...Array(12)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute startup-particle-motion"
-            style={{
-              left: `${(i * 11 + 5) % 95}%`,
-              top: `${(i * 13 + 10) % 90}%`,
-              animationDelay: `${i * 0.6}s`,
-              animationDuration: `${10 + i * 1.5}s`,
-            }}
-          >
+        {[...Array(12)].map((_, i) => {
+          const particleKey = `startup-particle-${i}`;
+          return (
             <div
-              className={`w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full opacity-20 ${
-                theme === "light"
-                  ? "bg-purple-400"
-                  : theme === "dark"
-                    ? "bg-purple-500"
-                    : "bg-pink-500"
-              }`}
+              key={particleKey}
+              className="absolute startup-particle-motion"
               style={{
-                filter: "blur(8px)",
+                left: `${(i * 11 + 5) % 95}%`,
+                top: `${(i * 13 + 10) % 90}%`,
+                animationDelay: `${i * 0.6}s`,
+                animationDuration: `${10 + i * 1.5}s`,
               }}
-            />
-          </div>
-        ))}
+            >
+              <div
+                className={`w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full opacity-20 ${
+                  theme === "light"
+                    ? "bg-purple-400"
+                    : theme === "dark"
+                      ? "bg-purple-500"
+                      : "bg-pink-500"
+                }`}
+                style={{
+                  filter: "blur(8px)",
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Content */}

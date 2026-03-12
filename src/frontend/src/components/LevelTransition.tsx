@@ -96,13 +96,16 @@ export function LevelTransition({
 
             {/* Animated stars */}
             <div className="flex gap-2 animate-bounce">
-              {[...Array(5)].map((_, i) => (
-                <Star
-                  key={i}
-                  className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300 fill-yellow-300"
-                  style={{ animationDelay: `${i * 0.1}s` }}
-                />
-              ))}
+              {[...Array(5)].map((_, i) => {
+                const starKey = `star-${i}`;
+                return (
+                  <Star
+                    key={starKey}
+                    className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-300 fill-yellow-300"
+                    style={{ animationDelay: `${i * 0.1}s` }}
+                  />
+                );
+              })}
             </div>
           </div>
         </Card>
